@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Memory harness data: source history, vector store, current_state.
+# PII-bearing and, for history, unregenerable — back it up, never commit it.
+data/
