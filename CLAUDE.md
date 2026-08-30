@@ -10,15 +10,22 @@ This file is normative: rules and invariants live here, stated once, in checkabl
 - `docs/README.md` — the design: stores, the loop, record shapes, build order.
 - `docs/architecture.md` — the object model: what each component is and what it promises.
 - `docs/engineering-practices.md` — toolchain, testing, eval, observability, and the open decisions.
+- `docs/user-guide.md` — how to install, configure, run, and troubleshoot it.
 
-## Status: design-only
+## Status: MVP implemented
 
-The repo holds `docs/`, a Python `.gitignore`, `LICENSE`, and an empty Python 3.14 `.venv/` (pip only).
-There is no dependency manifest, build system, or test suite, so **there are no build/lint/test commands
-to run yet.** Add them here as they land.
+`src/` implements the design (the layout in `docs/architecture.md`), `tests/` covers it including both
+milestone tests, and `evals/` holds the committed eval set. Python 3.14; dependencies in
+`pyproject.toml`, dev tools in its `dev` dependency group.
 
-Python 3.14 is settled — the `.venv/` and `.gitignore` are the only stack signals and they agree. The
-rest of the toolchain is the intended default, not yet installed.
+- Install: `.venv/bin/pip install -e . --group dev`
+- Test: `.venv/bin/pytest` — unit suite, no network. Real-provider suite: `.venv/bin/pytest -m
+  integration` (needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; skipped without one).
+- Lint / format: `.venv/bin/ruff check src tests` · `.venv/bin/ruff format src tests`
+- Eval: `.venv/bin/harness eval` (offline, hash embedder) · add `--real-embedder` for the configured
+  embedding model.
+- CLI: `harness chat | wake | rebuild --from-history | eval | state | log`. Configuration comes from
+  `HARNESS_*` env vars (`src/runtime/config.py`); `data/` holds the SQLite file.
 
 ## What is being built
 

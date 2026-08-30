@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-memory-harness"
+version = "0.1.0"
+description = "A minimal continuity layer for LLMs: long-term memory, current state, source history, and a wake loop."
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = [
+    "litellm>=1.77",
+    "pydantic-settings>=2.10",
+    "structlog>=25.4",
+]
+
+[project.scripts]
+harness = "runtime.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "hypothesis>=6.135",
+    "ruff>=0.12",
+    "pre-commit>=4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llm", "src/memory", "src/history", "src/state", "src/runtime"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-m 'not integration' -q"
+markers = [
+    "integration: tests that call real providers over the network; opt in with -m integration",
+]
+
+[tool.ruff]
+line-length = 110
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "strict"
