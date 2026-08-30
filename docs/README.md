@@ -79,8 +79,10 @@ same shape, which is what lets `rebuild --from-history` replay them the same way
   "occurred_at": "2026-08-30T17:04:00Z",
   "state_snapshot": { "...": "current_state as it was loaded" },
   "retrieved_memory_ids": ["mem_...", "mem_..."],
-  "messages": [{ "role": "user", "content": "..." }],
-  "output_text": "...",
+  "messages": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "...", "tool_calls": [] }
+  ],
   "decision": "respond",
   "stop_reason": "completed",
   "budget_used": { "iterations": 1, "tokens": 4120, "tool_calls": 0, "ms": 2310 }
@@ -89,10 +91,12 @@ same shape, which is what lets `rebuild --from-history` replay them the same way
 
 - `trigger` is `interaction`, `reflection`, or `autonomous`, and it is what a derived memory's `origin`
   copies.
-- `output_text` is the reason a reflection memory is regenerable at all. Rebuild does not re-run the
-  model's reasoning any more than it re-runs the user's half of a conversation; it re-derives memories from
-  recorded text. Leave the model's output out of history and everything reflection ever concluded
-  disappears on the first rebuild — silently, because the rebuild will look like it succeeded.
+- `messages` holds both halves of the exchange, and the assistant half is the reason a reflection memory
+  is regenerable at all. Rebuild does not re-run the model's reasoning any more than it re-runs the user's
+  side of a conversation; it re-derives memories from recorded text. Leave the model's output out of
+  history and everything reflection ever concluded disappears on the first rebuild — silently, because the
+  rebuild will look like it succeeded. Turns are appended as the cycle runs, not written once at the end,
+  so a memory the model writes through a tool call always has a committed turn to point at.
 - `retrieved_memory_ids` and `state_snapshot` record what the model was actually looking at. Retrieval
   quality is undiagnosable after the fact otherwise, and unlike a conversation, a wake has no user who
   remembers what it saw.
@@ -316,10 +320,10 @@ it should be deleted when the orchestrator exists rather than allowed to grow in
 ├── CLAUDE.md
 ├── docs/
 ├── src/
-│   ├── memory/          # store, search, preprocess, curate
-│   ├── state/           # current_state and its updates
+│   ├── memory/          # Memory, the store protocol, preprocess
+│   ├── state/           # current_state and its update step
 │   ├── history/         # append-only source history
-│   ├── llm/             # provider adapters
+│   ├── llm/             # LLMClient and Embedder over litellm
 │   └── runtime/         # orchestrator, triggers, budgets, CLI
 ├── evals/               # frozen corpus + (query, expected_memory_ids)
 ├── tests/

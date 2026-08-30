@@ -14,36 +14,23 @@ wired into `pre-commit` so local and CI agree. None of these are installed yet.
 Python 3.14 (the existing `.venv/`) is the target. Re-check wheel availability before adding any compiled
 dependency rather than assuming it.
 
-## Module boundaries
+## Implementation choices
 
-The embedding backend and the vector store are the two dependencies guaranteed to change — and the
-embedder is a different vendor from the LLM, since Anthropic exposes no first-party embeddings endpoint.
-Define both as `Protocol`s, `Embedder` and `MemoryStore`, and keep provider SDK types out of the core
-memory module.
+`architecture.md` has the object model — which components exist and what each promises. What belongs here
+is which implementation to reach for first.
 
-Start with the boring implementation: SQLite with `sqlite-vec`, or brute-force cosine over a numpy array.
-At MVP scale, exact search over a few thousand vectors is fast and has no index-tuning failure modes.
-Swap in something heavier when measured volume justifies it, not before.
+Start boring: SQLite with `sqlite-vec` behind `MemoryStore`, or brute-force cosine over a numpy array. At
+MVP scale, exact search over a few thousand vectors is fast and has no index-tuning failure modes. Swap in
+something heavier when measured volume justifies it, not before.
 
-Avoid LangChain / LlamaIndex here. Retrieval orchestration *is* the product; a framework hides the exact
-layer this project exists to design.
+Avoid LangChain / LlamaIndex. Retrieval orchestration *is* the product, and a framework hides the exact
+layer this project exists to design. litellm is not that kind of dependency — it normalizes one HTTP call
+and orchestrates nothing.
 
-The loop adds a third dependency worth isolating: time. Make the wake source a `Protocol` too — a `Clock`
-the orchestrator asks for the current time, and a `TriggerSource` it pulls wakes from. A loop that reads
-the system clock directly can only be tested by waiting, and cadence and cooldown are precisely the
-behaviors that need to be under test.
-
-## The orchestrator
-
-An explicit state machine, not a model deciding to call itself. States as an enum, transitions as a
-function of `(state, decision, budget)`; the model's output selects a branch, it does not drive control
-flow. The difference shows the first time a cycle misbehaves — a state machine leaves a transition log you
-can read, recursive model calls leave a stack you can only infer.
-
-Budget accounting belongs in one object threaded through the cycle, decremented at every model and tool
-call and checked at step boundaries rather than mid-write. Because history is committed before the derived
-writes, "ran out of budget" and "crashed" have the same recovery: the record is there and rebuild
-re-derives the rest.
+Budget accounting is one object threaded through the cycle, decremented at every model and tool call and
+checked at step boundaries rather than mid-write. Because history is committed before the derived writes,
+"ran out of budget" and "crashed" have the same recovery: the record is there and rebuild re-derives the
+rest.
 
 Cooldown is persisted state, not a `sleep()`. Store the last wake time so a restarted process does not
 immediately fire the autonomous trigger it was in the middle of cooling down from.
@@ -170,3 +157,8 @@ Blocking, in build order:
    its caches stay warm. Needed at build step 9.
 5. **Reflection cadence** — elapsed time, turns accumulated, or a threshold on unconsolidated memories. It
    sets the cost floor of running the system with nobody talking to it. Needed at build step 9.
+6. **Whether the caching strategy survives litellm** — the volatile block belongs in `messages[]`, and the
+   Anthropic way to put it there is a `{"role": "system"}` entry, which litellm may hoist into the
+   top-level `system` parameter and thereby invalidate the prefix on every request. Test it against a real
+   provider and watch the cache-hit counter; the fallback is a user-role block, which is provider-neutral
+   and gives up the operator channel. Needed at build step 8.
