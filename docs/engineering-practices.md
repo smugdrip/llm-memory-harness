@@ -1,8 +1,9 @@
 # Engineering practices
 
-How to build this repo without the failure modes common to retrieval systems. `README.md` is the design;
-`../CLAUDE.md` holds the rules, stated once — this file gives rationale and tooling, and does not restate
-them. Nothing here is settled by code yet; amend it as reality disagrees.
+How to build this repo without the failure modes common to retrieval systems, or to processes that run
+themselves. `README.md` is the design; `../CLAUDE.md` holds the rules, stated once — this file gives
+rationale and tooling, and does not restate them. Nothing here is settled by code yet; amend it as reality
+disagrees.
 
 ## Toolchain
 
@@ -27,6 +28,26 @@ Swap in something heavier when measured volume justifies it, not before.
 Avoid LangChain / LlamaIndex here. Retrieval orchestration *is* the product; a framework hides the exact
 layer this project exists to design.
 
+The loop adds a third dependency worth isolating: time. Make the wake source a `Protocol` too — a `Clock`
+the orchestrator asks for the current time, and a `TriggerSource` it pulls wakes from. A loop that reads
+the system clock directly can only be tested by waiting, and cadence and cooldown are precisely the
+behaviors that need to be under test.
+
+## The orchestrator
+
+An explicit state machine, not a model deciding to call itself. States as an enum, transitions as a
+function of `(state, decision, budget)`; the model's output selects a branch, it does not drive control
+flow. The difference shows the first time a cycle misbehaves — a state machine leaves a transition log you
+can read, recursive model calls leave a stack you can only infer.
+
+Budget accounting belongs in one object threaded through the cycle, decremented at every model and tool
+call and checked at step boundaries rather than mid-write. Because history is committed before the derived
+writes, "ran out of budget" and "crashed" have the same recovery: the record is there and rebuild
+re-derives the rest.
+
+Cooldown is persisted state, not a `sleep()`. Store the last wake time so a restarted process does not
+immediately fire the autonomous trigger it was in the middle of cooling down from.
+
 ## Rebuilds
 
 `rebuild --from-history` regenerates long-term memory and `current_state` from immutable history. Build it
@@ -35,6 +56,9 @@ being a migration problem and becomes a re-run. Two consequences beyond the idem
 
 - The store needs a schema version and migrations, SQLite included.
 - Rebuild cost scales with history, and the embedding backend sets the price of it. Batch the calls.
+- Supersession has to survive a rebuild. Replaying history in order should re-derive the same chains, but
+  that only holds if curation makes the same supersede call the second time. Worth an explicit round-trip
+  test: a rebuild that quietly resurrects retired memories looks exactly like a rebuild that worked.
 
 ## Testing
 
@@ -47,6 +71,12 @@ being a migration problem and becomes a re-run. Two consequences beyond the idem
   canonicalization output, not guess at the effect.
 - Property tests (hypothesis) for preprocessing against the invariant the design already states: names,
   dates, and project terms survive. That invariant is only real if something checks it.
+- Drive the loop with an injected clock and a scripted trigger source. Two properties are worth asserting
+  outright: an idle wake writes zero memory rows and leaves `current_state` byte-identical, and a wake that
+  exhausts its budget stops at a step boundary with its history record intact.
+- Fake the decide step the way the embedder is faked. Budgets, cooldown, transitions and the no-op path are
+  all decision-independent, and testing them with a real model in the way makes them slow and flaky for no
+  added coverage.
 
 ## Evaluation
 
@@ -59,6 +89,12 @@ pass threshold.
 
 If LLM-as-judge is used for memory quality, pin the judge model id and treat changing it as a change to
 the metric itself.
+
+The drift check is the second eval and it needs the first one to exist: run N reflection cycles over the
+frozen corpus, then re-measure recall@k. Reflection that consolidates leaves it flat or improves it;
+reflection that editorializes pushes real answers out of the top `k`, and the number moves well before
+anyone notices by reading. Track the ratio of reflection-written to interaction-written memories next to
+it — a store trending toward its own commentary shows up there earlier than in recall.
 
 ## Configuration
 
@@ -75,9 +111,11 @@ than parsing JSON out of prose. Candidate memories are a schema; enforce it at t
 
 Structured logging (structlog) with a single run id threaded through both write and search paths.
 
-For every inference log the query, **the retrieved memory ids and their scores**, token counts from
-`response.usage`, latency, and cost. Retrieval quality is undiagnosable after the fact without the
-retrieved set recorded.
+For every inference log the exact input the model received — system instructions, thread context, the
+retrieved memories, `current_state`, and the trigger — along with **the retrieved memory ids and their
+scores**, token counts from `response.usage`, latency, and cost. The ids and scores are enough to debug
+retrieval; they are not enough to debug behavior, and when the answers change the first question is always
+what the model actually saw.
 
 Prompt caching is the awkward case here: the prefix is stable, but memories and `current_state` change
 every turn. Cache lookup is prefix-matched over `tools` → `system` → `messages`, so putting the retrieved
@@ -87,16 +125,31 @@ user turn it was retrieved for, which is where the ordering rules put it anyway 
 or followed by an assistant turn). Watch `usage.cache_read_input_tokens`: zero across repeated requests
 means something upstream is still changing.
 
+Once wakes are recorded, the history record and the log overlap heavily — both want the retrieved ids, the
+token counts, the latency. Keep both, for different reasons: the history record is replayable ground truth
+and has to stay stable, while the log is operational and free to change shape. Where they overlap, write
+the record first and derive the log line from it, so the two cannot disagree about what happened.
+
+For autonomous wakes also log the decision and whether the cycle was a no-op. A stretch of wakes that all
+decided `sleep` is the system behaving correctly and should cost almost nothing to confirm; a stretch that
+all decided `reflect` is a runaway, and that shows up on the bill before it shows up in the answers.
+
 ## Reliability
 
 Batch embedding calls rather than embedding one record per request. Retries with jitter, explicit
 timeouts, and a most-specific-first exception chain (`RateLimitError` before a broad `APIStatusError`) so
 retryable and non-retryable failures stay distinguishable.
 
+An autonomous wake has nobody watching it fail. Alert on the loop's own health — wakes that error, wakes
+that hit the wall clock, cooldown violations — because the visible symptom of a broken reflection trigger
+is nothing happening, which is indistinguishable from the system correctly deciding there was nothing to
+do.
+
 ## Data handling
 
-`data/` is gitignored. Raw conversation history is PII-bearing and is the one thing in the system that
-cannot be regenerated — back it up from day one and keep it append-only. Everything in the memory layer is
+`data/` is gitignored. Source history is PII-bearing — raw conversation, plus the model's own output and
+the state snapshots recorded beside it — and it is the one thing in the system that cannot be regenerated.
+Back it up from day one and keep it append-only. Everything in the memory layer is
 reproducible from it.
 
 ## Open decisions
@@ -106,6 +159,14 @@ Blocking, in build order:
 1. **Embedding backend** — hosted API or local `sentence-transformers`. It fixes `embedding_dim`, the cost
    of every rebuild, and whether the integration suite needs network at all; local pulls in torch (2.13.0
    publishes cp314 wheels, checked 2026-08-30). Needed at build step 2.
-2. **Curation model and effort level** — curation runs after every turn and is the cost driver, so it need
-   not be the same model as the main loop. Needed at build step 6.
-3. **Runtime shape** — CLI chat loop, or a library others embed. Only blocks build step 8.
+2. **Curation model and effort level** — curation runs at the end of every non-idle cycle and is the cost
+   driver, so it need not be the same model as the main loop. Needed at build step 6.
+3. **Runtime shape** — the orchestrator settles the entry point; what remains is whether it ships as a CLI
+   that owns the process or a library others embed, which decides who owns the trigger loop. Needed at
+   build step 8.
+4. **What drives the clock** — an in-process scheduler holding a daemon open, or a one-shot `wake` command
+   invoked by cron or a systemd timer. The one-shot version is easier to reason about and makes invariant
+   14 structural rather than a matter of discipline; a daemon costs less per wake because the process and
+   its caches stay warm. Needed at build step 9.
+5. **Reflection cadence** — elapsed time, turns accumulated, or a threshold on unconsolidated memories. It
+   sets the cost floor of running the system with nobody talking to it. Needed at build step 9.
