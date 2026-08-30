@@ -1,0 +1,30 @@
+{"query": "Why does Meridian keep gallery metadata in SQLite?", "expected_keys": ["dec-sqlite"], "set": "dev"}
+{"query": "Are thumbnails generated with libvips or ImageMagick?", "expected_keys": ["dec-thumbnails"], "set": "dev"}
+{"query": "When did the first public Meridian gallery go live?", "expected_keys": ["event-launch"], "set": "dev"}
+{"query": "Who designs the gallery CSS themes?", "expected_keys": ["rel-priya"], "set": "dev"}
+{"query": "Does Dana like dark backgrounds for galleries?", "expected_keys": ["pref-dark"], "set": "dev"}
+{"query": "Back up originals to Backblaze B2 or the Synology NAS?", "expected_keys": ["oq-backup"], "set": "dev"}
+{"query": "What happens to GPS EXIF metadata on published photos?", "expected_keys": ["dec-exif"], "set": "dev"}
+{"query": "What did the deduplication bug do to the thumbnails?", "expected_keys": ["event-dedupe-bug"], "set": "dev"}
+{"query": "Which local model drafts alt text for photos?", "expected_keys": ["proj-captions"], "set": "dev"}
+{"query": "Does Dana like command line tools or web dashboards?", "expected_keys": ["pref-cli"], "set": "dev"}
+{"query": "Is Meridian on a Hetzner server?", "expected_keys": ["dec-hetzner"], "set": "dev"}
+{"query": "Who handles Dana's large-format printing?", "expected_keys": ["rel-marco"], "set": "dev"}
+{"query": "How many RAW photos did the Iceland trip produce?", "expected_keys": ["event-iceland"], "set": "dev"}
+{"query": "What license are gallery photos published under?", "expected_keys": ["dec-license"], "set": "dev"}
+{"query": "Hierarchical tags or flat keywords for the search index?", "expected_keys": ["oq-tags"], "set": "dev"}
+{"query": "Does gallery search use a sentence transformer and cosine similarity?", "expected_keys": ["proj-search"], "set": "dev"}
+{"query": "How long was Meridian down after the Falkenstein power cut?", "expected_keys": ["event-outage"], "set": "dev"}
+{"query": "Does Dana ever edit original RAW files in place?", "expected_keys": ["pref-originals"], "set": "dev"}
+{"query": "Who curates the family album section of Iceland photos?", "expected_keys": ["rel-anneke"], "set": "dev"}
+{"query": "Is the photos.example.net domain registered at Porkbun or Cloudflare?", "expected_keys": ["dec-porkbun"], "set": "dev"}
+{"query": "What is the Meridian photo archive pipeline?", "expected_keys": ["proj-meridian"], "set": "holdout"}
+{"query": "Which A2 prints did Marco deliver?", "expected_keys": ["event-prints"], "set": "holdout"}
+{"query": "What profile does color management use end to end?", "expected_keys": ["dec-p3"], "set": "holdout"}
+{"query": "Who shipped the Basalt dark theme?", "expected_keys": ["event-basalt"], "set": "holdout"}
+{"query": "Does Dana edit photos in the morning or the evening?", "expected_keys": ["pref-morning"], "set": "holdout"}
+{"query": "Does the map view cluster photos by geohash?", "expected_keys": ["proj-map"], "set": "holdout"}
+{"query": "What is the cap on the editing backlog?", "expected_keys": ["dec-backlog"], "set": "holdout"}
+{"query": "What does the nightly rsync cron job copy?", "expected_keys": ["proj-rsync"], "set": "holdout"}
+{"query": "When is the one-year Meridian retrospective post planned?", "expected_keys": ["event-retrospective"], "set": "holdout"}
+{"query": "Should full-resolution downloads get a watermark?", "expected_keys": ["oq-watermark"], "set": "holdout"}

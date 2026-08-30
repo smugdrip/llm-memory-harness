@@ -1,0 +1,26 @@
+[
+  {
+    "raw": "  Decision:   store long-term \n memory outside the thread.  ",
+    "canonical": "Decision: store long-term memory outside the thread."
+  },
+  {
+    "raw": "Cafe\u0301 meeting with Priya on 2026-09-05",
+    "canonical": "Caf\u00e9 meeting with Priya on 2026-09-05"
+  },
+  {
+    "raw": "zero\u200bwidth\u200cjoiners\u200d gone\ufeff",
+    "canonical": "zerowidthjoiners gone"
+  },
+  {
+    "raw": "tabs\tand\r\nnewlines\ncollapse",
+    "canonical": "tabs and newlines collapse"
+  },
+  {
+    "raw": "bell\u0007char",
+    "canonical": "bellchar"
+  },
+  {
+    "raw": "Meridian  uses   the Fuji X-T5",
+    "canonical": "Meridian uses the Fuji X-T5"
+  }
+]
