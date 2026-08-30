@@ -39,13 +39,15 @@ immediately fire the autonomous trigger it was in the middle of cooling down fro
 
 `rebuild --from-history` regenerates long-term memory and `current_state` from immutable history. Build it
 early and keep it working: once it exists, changing the embedding model or the preprocessing rules stops
-being a migration problem and becomes a re-run. Two consequences beyond the idempotency rule:
+being a migration problem and becomes a re-run. Three consequences beyond the idempotency rule:
 
 - The store needs a schema version and migrations, SQLite included.
-- Rebuild cost scales with history, and the embedding backend sets the price of it. Batch the calls.
-- Supersession has to survive a rebuild. Replaying history in order should re-derive the same chains, but
-  that only holds if curation makes the same supersede call the second time. Worth an explicit round-trip
-  test: a rebuild that quietly resurrects retired memories looks exactly like a rebuild that worked.
+- Rebuild makes no model call. Writes and supersedes are recorded in history as tool calls, so replay
+  re-executes decisions rather than re-deriving them, and supersession chains come back for free.
+- That makes the embedding backend the entire price of a rebuild, and it scales with history. Batch the
+  calls. Keep a round-trip test over supersession anyway — a rebuild that quietly resurrects retired
+  memories looks exactly like one that worked — but what it guards is replay order, not model
+  nondeterminism.
 
 ## Testing
 
@@ -146,19 +148,21 @@ Blocking, in build order:
 1. **Embedding backend** — hosted API or local `sentence-transformers`. It fixes `embedding_dim`, the cost
    of every rebuild, and whether the integration suite needs network at all; local pulls in torch (2.13.0
    publishes cp314 wheels, checked 2026-08-30). Needed at build step 2.
-2. **Curation model and effort level** — curation runs at the end of every non-idle cycle and is the cost
-   driver, so it need not be the same model as the main loop. Needed at build step 6.
-3. **Runtime shape** — the orchestrator settles the entry point; what remains is whether it ships as a CLI
-   that owns the process or a library others embed, which decides who owns the trigger loop. Needed at
-   build step 8.
-4. **What drives the clock** — an in-process scheduler holding a daemon open, or a one-shot `wake` command
-   invoked by cron or a systemd timer. The one-shot version is easier to reason about and makes invariant
-   14 structural rather than a matter of discipline; a daemon costs less per wake because the process and
-   its caches stay warm. Needed at build step 9.
-5. **Reflection cadence** — elapsed time, turns accumulated, or a threshold on unconsolidated memories. It
-   sets the cost floor of running the system with nobody talking to it. Needed at build step 9.
-6. **Whether the caching strategy survives litellm** — the volatile block belongs in `messages[]`, and the
+2. **Whether the caching strategy survives litellm** — the volatile block belongs in `messages[]`, and the
    Anthropic way to put it there is a `{"role": "system"}` entry, which litellm may hoist into the
    top-level `system` parameter and thereby invalidate the prefix on every request. Test it against a real
    provider and watch the cache-hit counter; the fallback is a user-role block, which is provider-neutral
-   and gives up the operator channel. Needed at build step 8.
+   and gives up the operator channel. Needed at build step 6.
+3. **Runtime shape** — the orchestrator settles the entry point; what remains is whether it ships as a CLI
+   that owns the process or a library others embed, which decides who owns the trigger loop. Needed at
+   build step 8.
+4. **Whether reflection runs on a cheaper model** — tool-calling folds curation into the cycle that is
+   already happening, so the interaction path has no separate curation model left to choose. Reflection is
+   its own wake and could use a cheaper one, trading consolidation quality against the cost floor of
+   running with nobody talking to the system. Needed at build step 9.
+5. **What drives the clock** — an in-process scheduler holding a daemon open, or a one-shot `wake` command
+   invoked by cron or a systemd timer. The one-shot version is easier to reason about and makes invariant
+   14 structural rather than a matter of discipline; a daemon costs less per wake because the process and
+   its caches stay warm. Needed at build step 9.
+6. **Reflection cadence** — elapsed time, turns accumulated, or a threshold on unconsolidated memories. It
+   sets the cost floor of running the system with nobody talking to it. Needed at build step 9.
