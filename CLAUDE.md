@@ -8,6 +8,7 @@ This file is normative: rules and invariants live here, stated once, in checkabl
 *why* and does not restate a rule. Keep it that way as the docs grow — a rule changes in one place.
 
 - `docs/README.md` — the design: stores, the loop, record shapes, build order.
+- `docs/architecture.md` — the object model: what each component is and what it promises.
 - `docs/engineering-practices.md` — toolchain, testing, eval, observability, and the open decisions.
 
 ## Status: design-only
@@ -75,6 +76,17 @@ Design decisions that non-obviously constrain implementation, and the ones easie
 19. A `preference` memory needs repeated evidence, never a single statement. Promoting one remark to a
     durable trait is how a continuity layer becomes a hard-coded personality by accident — which is on the
     out-of-scope list, and will not announce itself when it happens.
+20. Provider names, model ids, and litellm itself appear only in `LLMClient` and `Embedder`
+    implementations. No other module imports litellm or names a model, and provider response objects do
+    not cross that boundary — otherwise the dependency has quietly become the interface.
+21. The model's tools are a binding over the same methods the system calls directly. There is no second
+    retrieval path and no second write path; a similarity floor or duplicate check that only one caller
+    goes through is not enforced.
+22. Provenance is bound by the orchestrator, never supplied by the model. Tool schemas expose semantic
+    arguments only — a model that can set `source_id` controls idempotency, rebuild, and every provenance
+    claim in the system.
+23. A model turn is appended to history before its tool calls execute, so a memory written mid-cycle
+    always has a committed source to be replayed from.
 
 Memory types for the MVP: `event`, `decision`, `project`, `relationship`, `preference`, `open_question`.
 
