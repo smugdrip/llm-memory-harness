@@ -93,7 +93,8 @@ same shape, which is what lets `rebuild --from-history` replay them the same way
   copies.
 - `messages` holds both halves of the exchange, and the assistant half is the reason a reflection memory
   is regenerable at all. Rebuild does not re-run the model's reasoning any more than it re-runs the user's
-  side of a conversation; it re-derives memories from recorded text. Leave the model's output out of
+  side of a conversation; it replays the `memory_write` and `memory_supersede` calls those turns
+  recorded. Leave the model's output out of
   history and everything reflection ever concluded disappears on the first rebuild — silently, because the
   rebuild will look like it succeeded. Turns are appended as the cycle runs, not written once at the end,
   so a memory the model writes through a tool call always has a committed turn to point at.
@@ -296,21 +297,29 @@ degradation shows up as a number instead of as a vague sense that the answers go
 
 ## Build order
 
-1. **Source history** — append-only, one record shape for turns and wakes. The one store that cannot be
+1. **Source history** — append-only, one record shape for turns and wakes. `state_snapshot` and
+   `retrieved_memory_ids` stay opaque until steps 3 and 7 give them types. The one store that cannot be
    regenerated.
 2. **Preprocessing**, plus `Embedder` / `MemoryStore` protocols and a fake embedder.
-3. **`memory.write()` / `memory.search()`** over the boring store.
-4. **`rebuild --from-history`** — early, while the store is small enough that it is easy.
-5. **Eval set + recall@k** — before tuning retrieval, not after.
-6. **Curation**, including the duplicate check.
-7. **`current_state`** and its update step.
-8. **The orchestrator**, interaction trigger only — the state machine, the budgets, and the
-   consolidate/save steps, driving the path that already worked in steps 3–7. Milestone one runs through
-   this.
+3. **`Memory`** — `search` / `write` / `supersede` over the boring store, the near-duplicate check inside
+   `write`, and the tool binding, because it is the same object.
+4. **`rebuild --from-history`** — replays the tool calls recorded in history, so it makes no model call.
+   Fixture-driven until step 8 produces real wakes; build it early anyway, while it is easy.
+5. **Eval set + recall@k** against `Memory.search()` directly — before tuning retrieval, not after. The
+   end-to-end half of the eval arrives with step 8.
+6. **`LLMClient`** — litellm behind our own `Completion`, tool schemas in and tool calls out, cost
+   accounting. Whether the caching approach survives litellm gets settled here.
+7. **`current_state`**, its store, and `update_state()`, which needs step 6 for its model call.
+8. **The orchestrator**, interaction trigger only — the state machine, the budgets, the tool loop, and the
+   append-turn-before-dispatch ordering, over the pieces built in steps 3–7. Milestone one runs through
+   this, and curation becomes real here: it is the model choosing to call `memory_write`.
 9. **Reflection and autonomous triggers**, plus cooldown and the drift check. The parts that let a cycle
    begin without a user.
 
-A throwaway script can drive steps 3–7 by hand long before step 8. That script is not the orchestrator, and
+Curation is not a step. The near-duplicate check is part of step 3 and the judgment about what is worth
+keeping is a property of step 8, because it is a tool call and nothing calls tools until the loop exists.
+
+A throwaway script can drive steps 3–5 by hand long before step 8. That script is not the orchestrator, and
 it should be deleted when the orchestrator exists rather than allowed to grow into a second one.
 
 ## Repository structure

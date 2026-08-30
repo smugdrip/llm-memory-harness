@@ -89,8 +89,16 @@ class Memory:
     def __init__(self, store: MemoryStore, embedder: Embedder) -> None: ...
 
     def search(self, query: str, k: int = 5) -> list[MemoryRecord]: ...
-    def write(self, text: str, type: MemoryType, *,
+
+    def write(self, text: str, type: MemoryType,
+              *,
+              # judgments, in the tool schema
+              occurred_at: datetime | None = None,
+              importance: float = 0.5,
+              entities: Sequence[str] = (),
+              # provenance, bound by the caller, absent from the schema
               source_id: str, origin: Trigger) -> MemoryRecord | None: ...
+
     def supersede(self, memory_id: str, text: str, *,
                   source_id: str, origin: Trigger) -> MemoryRecord: ...
 
@@ -106,9 +114,15 @@ the orchestrator calls directly. There is one similarity floor, one duplicate ch
 call site. A design where the model's search and the system's search are separate implementations is a
 design where they drift apart and only one of them is the one the eval measures.
 
+**A memory record has three sources, and the split is the contract.** Derived: `id`, `canonical_text`,
+`created_at`, `supersedes` / `superseded_by`, and the three embedding fields. Bound by the orchestrator:
+`source_id` and `origin`. Supplied by the model: `type`, `occurred_at`, `importance`, `entities`, and the
+`text` that becomes `raw_text`. `occurred_at` and `importance` have to come from the model because nothing
+else knows them — `occurred_at` diverges from `created_at` exactly when a conversation is recalling the
+past, and importance is a judgment. Leave them off the signature and the record cannot be built.
+
 **Provenance is bound by the caller, never supplied by the model.** `source_id` and `origin` are
-keyword-only on the write path and absent from `tool_schemas()` — the model passes `text` and `type`, and
-the orchestrator supplies where it came from. If the model could set `source_id`, then idempotency,
+keyword-only and absent from `tool_schemas()`, which is the line the split above draws. If the model could set `source_id`, then idempotency,
 rebuild, and every provenance claim in the system would be model-controlled, and a confused or adversarial
 turn could overwrite an unrelated memory by naming its source.
 
